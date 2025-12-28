@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Classroom Buzzer</title>
+  <link rel="stylesheet" href="app.css" />
+  <style>
+    .row{display:flex;gap:14px;flex-wrap:wrap}
+    .card a.button{display:inline-block;text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <h1>Classroom Buzzer</h1>
+      <p class="muted">A simple live buzzer for classroom questioning.</p>
+    </header>
+
+    <div class="row">
+      <section class="card" style="flex:1;min-width:260px">
+        <h2>Host (Teacher)</h2>
+        <p class="muted">Create/open a room, ask questions, see who buzzed first, and cold call.</p>
+        <a class="button" href="host.html">Open Host</a>
+      </section>
+
+      <section class="card" style="flex:1;min-width:260px">
+        <h2>Student</h2>
+        <p class="muted">Join with a room code and your name, then buzz in (and optionally type your answer).</p>
+        <a class="button" href="student.html">Open Student</a>
+      </section>
+    </div>
+
+    <p class="muted" style="margin-top:14px;">
+      Tip: Use the same Firebase project as your Quizmas version — this is just a simpler front-end.
+    </p>
+  </div>
+</body>
+</html>

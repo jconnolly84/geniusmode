@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Classroom Buzzer — Host</title>
+  <link rel="stylesheet" href="app.css" />
+  <style>
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .grow{flex:1}
+    textarea{width:100%;min-height:92px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+    .big{font-size:28px;font-weight:800}
+    .muted{opacity:.8}
+    .ok{color:#7CFCB3}
+    .bad{color:#ff8a8a}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <h1>Classroom Buzzer — Host</h1>
+      <p class="muted">Project this screen. Students join on their devices and buzz in.</p>
+    </header>
+
+    <audio id="hostBuzzerAudio" src="buzzer.mp3" preload="auto"></audio>
+
+    <div class="grid2">
+
+      <section class="card">
+        <h2>Room</h2>
+        <div class="row">
+          <input id="roomInput" class="grow" placeholder="Room code (e.g. ABCD)" maxlength="12" />
+          <button id="createBtn">Create / Open</button>
+        </div>
+        <p id="status" class="muted">Not connected.</p>
+        <p class="muted">Share this student link: <span class="pill">student.html</span></p>
+      </section>
+
+      <section class="card">
+        <h2>Students</h2>
+        <p class="muted">Connected: <span id="studentCount">0</span></p>
+        <div id="studentList" class="muted" style="line-height:1.6"></div>
+      </section>
+
+      <section class="card">
+        <h2>Question</h2>
+
+        <div class="row">
+          <label class="pill"><input type="radio" name="qmode" value="verbal" checked /> Verbal</label>
+          <label class="pill"><input type="radio" name="qmode" value="text" /> Typed on screen</label>
+          <label class="pill"><input id="allowTyping" type="checkbox" /> Allow typed answers (after buzzing)</label>
+        </div>
+
+        <div id="questionTextWrap" style="margin-top:10px; display:none;">
+          <textarea id="questionText" placeholder="Type the question you want students to see…"></textarea>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="sendQuestionBtn">Send question</button>
+          <button id="clearQuestionBtn" class="secondary">Clear</button>
+        </div>
+
+        <p class="muted" style="margin-top:10px;">Tip: sending a question also resets the buzzer.</p>
+      </section>
+
+      <section class="card">
+        <h2>Buzzer</h2>
+        <div class="row">
+          <div>
+            <div class="muted">Buzzed first</div>
+            <div id="winner" class="big">—</div>
+          </div>
+          <div class="grow">
+            <div class="muted">Typed answer (if enabled)</div>
+            <div id="typedAnswer" class="pill" style="display:inline-block;max-width:100%;white-space:normal;">—</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button id="resetBuzzBtn">Reset buzzer</button>
+        </div>
+        <p class="muted">Only the first buzz counts until reset.</p>
+      </section>
+
+      <section class="card">
+        <h2>Cold call</h2>
+        <p class="muted">Pick a random student (no repeats until everyone’s been picked).</p>
+        <div class="row">
+          <button id="pickColdBtn">Pick random student</button>
+          <button id="clearColdBtn" class="secondary">Clear</button>
+        </div>
+        <p style="margin-top:10px;">Current: <span id="coldCurrent" class="pill">—</span></p>
+      </section>
+
+      <section class="card">
+        <h2>How to use</h2>
+        <ol class="muted" style="line-height:1.6;">
+          <li>Create a room and share the room code.</li>
+          <li>Ask a question verbally or type it and press <b>Send question</b>.</li>
+          <li>Students buzz in; you can optionally allow typed answers.</li>
+          <li>Use <b>Reset buzzer</b> for the next question.</li>
+          <li>Use <b>Cold call</b> to pick a student at random.</li>
+        </ol>
+      </section>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      ensureRoom,
+      listenRoom,
+      setQuestion,
+      clearQuestion,
+      resetBuzz,
+      coldCallPick,
+      coldCallClear
+    } from "./common.js";
+
+    const $ = (id) => document.getElementById(id);
+
+    let roomId = null;
+    let unsub = null;
+    let lastBuzzedBy = null;
+
+    function playHostBuzz() {
+      const a = $("hostBuzzerAudio");
+      if (!a) return;
+      try {
+        a.currentTime = 0;
+        const p = a.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch (e) {}
+    }
+
+    // Prime audio on first interaction (Safari/iOS)
+    document.addEventListener("pointerdown", () => {
+      const a = $("hostBuzzerAudio");
+      if (!a) return;
+      try {
+        a.muted = true;
+        const p = a.play();
+        if (p && typeof p.then === "function") {
+          p.then(() => {
+            a.pause(); a.currentTime = 0; a.muted = false;
+          }).catch(() => {
+            a.pause(); a.currentTime = 0; a.muted = false;
+          });
+        }
+      } catch(e) {}
+    }, { once: true });
+
+    function getMode() {
+      const el = document.querySelector('input[name="qmode"]:checked');
+      return el ? el.value : "verbal";
+    }
+
+    function render(data) {
+      if (!data) return;
+
+      // Students
+      const students = Array.isArray(data.students) ? data.students : [];
+      $("studentCount").textContent = String(students.length);
+      $("studentList").innerHTML = students.length
+        ? students.map(s => `• ${escapeHtml(s)}`).join("<br>")
+        : "<span class='muted'>No one joined yet.</span>";
+
+      // Question
+      const q = data.question || {};
+      const mode = q.mode === "text" ? "text" : "verbal";
+      document.querySelectorAll('input[name="qmode"]').forEach(r => r.checked = (r.value === mode));
+      $("allowTyping").checked = !!q.allowTyping;
+
+      if (mode === "text") {
+        $("questionTextWrap").style.display = "block";
+        $("questionText").value = q.text || "";
+      } else {
+        $("questionTextWrap").style.display = "none";
+        $("questionText").value = "";
+      }
+
+      // Buzzer
+      const lockedBy = data?.buzz?.lockedBy ?? null;
+      const ans = data?.buzz?.answer ?? null;
+
+      if (lockedBy && lockedBy !== lastBuzzedBy) {
+        playHostBuzz();
+        lastBuzzedBy = lockedBy;
+      }
+      if (!lockedBy) lastBuzzedBy = null;
+
+      $("winner").textContent = lockedBy || "—";
+      $("typedAnswer").textContent = ans || "—";
+
+      // Cold call
+      const cc = data.coldCall || {};
+      $("coldCurrent").textContent = cc.current || "—";
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+      }[c]));
+    }
+
+    async function connectRoom() {
+      const v = $("roomInput").value.trim().toUpperCase();
+      if (!v) { $("status").textContent = "Enter a room code."; return; }
+      roomId = v;
+
+      $("status").textContent = "Connecting…";
+      try {
+        await ensureRoom(roomId);
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Failed to open room:</span> ${escapeHtml(e.message || String(e))}`;
+        return;
+      }
+
+      if (unsub) unsub();
+      unsub = listenRoom(roomId, (data) => {
+        $("status").innerHTML = `<span class="ok">Room ready:</span> <span class="pill">${escapeHtml(roomId)}</span>`;
+        render(data);
+      });
+    }
+
+    $("createBtn").addEventListener("click", connectRoom);
+
+    // Toggle question textarea visibility instantly (no need to wait for DB)
+    document.querySelectorAll('input[name="qmode"]').forEach(r => {
+      r.addEventListener("change", () => {
+        $("questionTextWrap").style.display = (getMode() === "text") ? "block" : "none";
+      });
+    });
+
+    $("sendQuestionBtn").addEventListener("click", async () => {
+      if (!roomId) { $("status").textContent = "Create/open a room first."; return; }
+      const mode = getMode();
+      const allowTyping = $("allowTyping").checked;
+      const text = $("questionText").value;
+
+      try {
+        await setQuestion(roomId, { mode, text, allowTyping });
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Send failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+
+    $("clearQuestionBtn").addEventListener("click", async () => {
+      if (!roomId) return;
+      try {
+        await clearQuestion(roomId);
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Clear failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+
+    $("resetBuzzBtn").addEventListener("click", async () => {
+      if (!roomId) return;
+      try {
+        await resetBuzz(roomId);
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Reset failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+
+    $("pickColdBtn").addEventListener("click", async () => {
+      if (!roomId) return;
+      try {
+        await coldCallPick(roomId);
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Cold call failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+
+    $("clearColdBtn").addEventListener("click", async () => {
+      if (!roomId) return;
+      try {
+        await coldCallClear(roomId);
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Clear failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+  </script>
+</body>
+</html>

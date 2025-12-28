@@ -1,0 +1,14 @@
+/* app.css */
+:root { --bg:#0b0f19; --card:#131a2a; --text:#e8eefc; --muted:#a9b4d0; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
+a { color: var(--text); text-decoration: underline; }
+.wrap { max-width: 900px; margin:0 auto; padding:18px; }
+.card { background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:16px; margin:12px 0; }
+.row { display:flex; gap:12px; flex-wrap:wrap; align-items: flex-end; }
+.col { flex: 1 1 280px; }
+.small { color:var(--muted); font-size:14px; margin-top: 8px; }
+input, button { font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:#0f1627; color:var(--text); }
+button { cursor:pointer; font-weight:700; }
+.big { font-size:44px; font-weight:900; letter-spacing:.5px; margin: 8px 0; }
+.buzz { width:100%; padding:18px 22px; font-size:34px; border-radius:16px; margin-top: 10px; }

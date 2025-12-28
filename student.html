@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Classroom Buzzer — Student</title>
+  <link rel="stylesheet" href="app.css" />
+  <style>
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .grow{flex:1}
+    .bigBtn{width:100%;padding:18px 16px;font-size:22px;font-weight:900}
+    .card + .card{margin-top:14px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+    .callout{border:2px solid rgba(255,255,255,.22);background:rgba(255,255,255,.05);border-radius:16px;padding:12px}
+    .ok{color:#7CFCB3}
+    .bad{color:#ff8a8a}
+    input[type="text"]{width:100%}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <h1>Classroom Buzzer — Student</h1>
+      <p class="muted">Join the room, then buzz in to answer.</p>
+    </header>
+
+    <audio id="buzzerAudio" src="buzzer.mp3" preload="auto"></audio>
+
+    <section class="card" id="joinCard">
+      <h2>Join</h2>
+      <div class="row">
+        <input id="roomInput" class="grow" placeholder="Room code" maxlength="12" />
+        <input id="nameInput" class="grow" placeholder="Your name" maxlength="30" />
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="joinBtn">Join room</button>
+      </div>
+      <p id="status" class="muted">Not connected.</p>
+    </section>
+
+    <section class="card" id="playCard" style="display:none;">
+      <h2>Question</h2>
+      <div id="questionBox" class="callout">
+        <div id="questionMode" class="muted">Teacher will ask verbally.</div>
+        <div id="questionText" style="margin-top:6px;font-size:18px;font-weight:800;"></div>
+        <div class="muted" style="margin-top:8px;">Room: <span id="roomPill" class="pill"></span> · You: <span id="namePill" class="pill"></span></div>
+      </div>
+
+      <div id="coldCallBox" class="callout" style="margin-top:12px; display:none;">
+        <div class="muted">Cold call</div>
+        <div style="font-size:20px;font-weight:900;margin-top:4px;">You’ve been picked — answer now.</div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <button id="buzzBtn" class="bigBtn">🔔 BUZZ</button>
+        <p id="buzzStatus" class="muted" style="margin-top:10px;">Waiting for someone to buzz…</p>
+      </div>
+
+      <div id="answerWrap" class="callout" style="margin-top:12px; display:none;">
+        <div class="muted">Typed answer (after buzzing)</div>
+        <input id="answerInput" type="text" placeholder="Type your answer…" />
+        <div class="row" style="margin-top:10px;">
+          <button id="submitAnswerBtn">Submit answer</button>
+        </div>
+        <p id="answerStatus" class="muted"></p>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    import {
+      ensureRoom,
+      listenRoom,
+      registerStudent,
+      buzz,
+      submitAnswer
+    } from "./common.js";
+
+    const $ = (id) => document.getElementById(id);
+
+    let roomId = null;
+    let me = null;
+    let unsub = null;
+
+    function playBuzz() {
+      const a = $("buzzerAudio");
+      if (!a) return;
+      try {
+        a.currentTime = 0;
+        const p = a.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch(e) {}
+    }
+
+    // Prime audio on first interaction
+    document.addEventListener("pointerdown", () => {
+      const a = $("buzzerAudio");
+      if (!a) return;
+      try {
+        a.muted = true;
+        const p = a.play();
+        if (p && typeof p.then === "function") {
+          p.then(() => { a.pause(); a.currentTime = 0; a.muted = false; })
+           .catch(() => { a.pause(); a.currentTime = 0; a.muted = false; });
+        }
+      } catch(e) {}
+    }, { once: true });
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+      }[c]));
+    }
+
+    function render(data) {
+      if (!data) return;
+
+      // Question display
+      const q = data.question || {};
+      const mode = q.mode === "text" ? "text" : "verbal";
+      if (mode === "text" && q.text) {
+        $("questionMode").textContent = "Question on screen:";
+        $("questionText").textContent = q.text;
+      } else {
+        $("questionMode").textContent = "Teacher will ask verbally.";
+        $("questionText").textContent = "";
+      }
+
+      // Cold call
+      const cc = data.coldCall || {};
+      const isCold = cc.current && cc.current === me;
+      $("coldCallBox").style.display = isCold ? "block" : "none";
+      if (isCold) playBuzz();
+
+      // Buzz status
+      const lockedBy = data?.buzz?.lockedBy ?? null;
+      const allowTyping = !!q.allowTyping;
+      const winnerIsMe = lockedBy && lockedBy === me;
+
+      if (!lockedBy) {
+        $("buzzStatus").innerHTML = "Waiting for someone to buzz…";
+      } else if (winnerIsMe) {
+        $("buzzStatus").innerHTML = `<span class="ok">You buzzed first!</span>`;
+      } else {
+        $("buzzStatus").innerHTML = `Locked by: <b>${escapeHtml(lockedBy)}</b>`;
+      }
+
+      // Disable buzz button when locked by someone (including me)
+      $("buzzBtn").disabled = !!lockedBy;
+
+      // Typed answer UI (only for winner, only if enabled)
+      $("answerWrap").style.display = (allowTyping && winnerIsMe) ? "block" : "none";
+
+      // If winner already submitted an answer, show it to them
+      const ans = data?.buzz?.answer ?? null;
+      if (allowTyping && winnerIsMe && ans) {
+        $("answerStatus").innerHTML = `<span class="ok">Submitted:</span> ${escapeHtml(ans)}`;
+      } else {
+        $("answerStatus").textContent = "";
+      }
+    }
+
+    async function doJoin() {
+      const r = $("roomInput").value.trim().toUpperCase();
+      const n = $("nameInput").value.trim();
+
+      if (!r) { $("status").textContent = "Enter a room code."; return; }
+      if (!n) { $("status").textContent = "Enter your name."; return; }
+
+      roomId = r;
+      me = n;
+
+      $("status").textContent = "Joining…";
+      try {
+        await ensureRoom(roomId);
+        await registerStudent(roomId, me);
+      } catch (e) {
+        $("status").innerHTML = `<span class="bad">Join failed:</span> ${escapeHtml(e.message || String(e))}`;
+        return;
+      }
+
+      $("joinCard").style.display = "none";
+      $("playCard").style.display = "block";
+      $("roomPill").textContent = roomId;
+      $("namePill").textContent = me;
+
+      if (unsub) unsub();
+      unsub = listenRoom(roomId, render);
+
+      $("status").innerHTML = `<span class="ok">Joined:</span> ${escapeHtml(roomId)}`;
+    }
+
+    $("joinBtn").addEventListener("click", doJoin);
+
+    $("buzzBtn").addEventListener("click", async () => {
+      if (!roomId || !me) return;
+      playBuzz();
+      try {
+        await buzz(roomId, me);
+      } catch (e) {
+        $("buzzStatus").innerHTML = `<span class="bad">Buzz failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+
+    $("submitAnswerBtn").addEventListener("click", async () => {
+      if (!roomId || !me) return;
+      const a = $("answerInput").value;
+      try {
+        await submitAnswer(roomId, me, a);
+        $("answerInput").value = "";
+      } catch (e) {
+        $("answerStatus").innerHTML = `<span class="bad">Submit failed:</span> ${escapeHtml(e.message || String(e))}`;
+      }
+    });
+  </script>
+</body>
+</html>
