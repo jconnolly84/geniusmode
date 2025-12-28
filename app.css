@@ -1,14 +1,151 @@
-/* app.css */
-:root { --bg:#0b0f19; --card:#131a2a; --text:#e8eefc; --muted:#a9b4d0; }
-* { box-sizing: border-box; }
-body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
-a { color: var(--text); text-decoration: underline; }
-.wrap { max-width: 900px; margin:0 auto; padding:18px; }
-.card { background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:16px; margin:12px 0; }
-.row { display:flex; gap:12px; flex-wrap:wrap; align-items: flex-end; }
-.col { flex: 1 1 280px; }
-.small { color:var(--muted); font-size:14px; margin-top: 8px; }
-input, button { font-size:16px; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:#0f1627; color:var(--text); }
-button { cursor:pointer; font-weight:700; }
-.big { font-size:44px; font-weight:900; letter-spacing:.5px; margin: 8px 0; }
-.buzz { width:100%; padding:18px 22px; font-size:34px; border-radius:16px; margin-top: 10px; }
+/* app.css — Genius Mode (game‑show theme) */
+:root{
+  --bg:#070A14;
+  --bg2:#0b1230;
+  --card:rgba(17,24,39,.72);
+  --card2:rgba(17,24,39,.55);
+  --text:#EAF0FF;
+  --muted:#B8C3E6;
+  --line:rgba(255,255,255,.10);
+  --shadow:0 18px 40px rgba(0,0,0,.45);
+  --glow:0 0 24px rgba(120,155,255,.35);
+  --accent:#5EEAD4;
+  --accent2:#60A5FA;
+  --danger:#FF4D6D;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  color:var(--text);
+  /* layered “stage lights” background */
+  background:
+    radial-gradient(1200px 800px at 20% -10%, rgba(96,165,250,.35), transparent 60%),
+    radial-gradient(1000px 700px at 85% 0%, rgba(94,234,212,.28), transparent 55%),
+    radial-gradient(900px 650px at 50% 115%, rgba(255,77,109,.18), transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg2));
+  overflow-x:hidden;
+}
+
+/* subtle animated shimmer */
+body:before{
+  content:"";
+  position:fixed; inset:0;
+  background:
+    radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,.28), transparent 60%),
+    radial-gradient(2px 2px at 35% 65%, rgba(255,255,255,.22), transparent 60%),
+    radial-gradient(2px 2px at 75% 35%, rgba(255,255,255,.18), transparent 60%),
+    radial-gradient(2px 2px at 90% 80%, rgba(255,255,255,.22), transparent 60%);
+  opacity:.35;
+  pointer-events:none;
+  animation: sparkle 10s linear infinite;
+}
+@keyframes sparkle{
+  0%{transform:translate3d(0,0,0)}
+  100%{transform:translate3d(-40px, 20px, 0)}
+}
+
+a{color:var(--text); text-decoration:underline}
+
+.wrap{max-width:980px; margin:0 auto; padding:20px 18px 34px}
+.header{margin:8px 0 16px}
+.brand{
+  display:flex; gap:14px; align-items:center;
+  padding:14px 14px;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+  border:1px solid var(--line);
+  box-shadow:var(--shadow), var(--glow);
+  backdrop-filter: blur(8px);
+}
+.logo{
+  width:64px; height:64px; object-fit:contain;
+  filter: drop-shadow(0 12px 16px rgba(0,0,0,.45));
+}
+.brandText h1{
+  margin:0;
+  font-size:28px;
+  letter-spacing:.3px;
+  text-shadow: 0 2px 12px rgba(0,0,0,.55);
+}
+.muted{opacity:.9; color:var(--muted); margin:6px 0 0}
+
+.card{
+  background:linear-gradient(180deg, var(--card), var(--card2));
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:16px;
+  margin:14px 0;
+  box-shadow:var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+.row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
+.col{flex:1 1 280px}
+
+.small{color:var(--muted); font-size:14px; margin-top:8px}
+
+input, textarea, button{
+  font-size:16px;
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(15,22,39,.78);
+  color:var(--text);
+  outline:none;
+}
+textarea{width:100%}
+
+input:focus, textarea:focus{
+  border-color: rgba(96,165,250,.55);
+  box-shadow: 0 0 0 4px rgba(96,165,250,.16);
+}
+
+/* Buttons */
+button{
+  cursor:pointer;
+  font-weight:800;
+  letter-spacing:.2px;
+  border:1px solid rgba(255,255,255,.18);
+  background:
+    linear-gradient(180deg, rgba(96,165,250,.95), rgba(59,130,246,.72));
+  box-shadow: 0 10px 22px rgba(0,0,0,.35);
+  transition: transform .08s ease, filter .15s ease, box-shadow .15s ease;
+}
+button:hover{filter:brightness(1.06)}
+button:active{transform:translateY(1px); box-shadow: 0 6px 14px rgba(0,0,0,.35)}
+
+button.secondary{
+  background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06));
+}
+
+button.danger{
+  background:linear-gradient(180deg, rgba(255,77,109,.95), rgba(225,29,72,.75));
+}
+
+/* Big buzzer */
+.buzz{
+  width:100%;
+  padding:18px 22px;
+  font-size:34px;
+  border-radius:18px;
+  margin-top:10px;
+  background:linear-gradient(180deg, rgba(255,77,109,.95), rgba(225,29,72,.78));
+  border:1px solid rgba(255,255,255,.18);
+  text-transform:uppercase;
+  box-shadow: 0 20px 40px rgba(0,0,0,.45), 0 0 34px rgba(255,77,109,.22);
+}
+.buzz:hover{filter:brightness(1.05)}
+.buzz:active{transform:translateY(2px)}
+.big{font-size:44px; font-weight:950; letter-spacing:.6px; margin: 8px 0}
+
+/* Nice pills/badges if used */
+.pill{
+  display:inline-block;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.14);
+}
