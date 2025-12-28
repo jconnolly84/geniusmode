@@ -1,4 +1,4 @@
-// common.js (Classroom Buzzer)
+// common.js (Genius Mode)
 // Firebase + shared room logic for Host + Student pages
 
 import { firebaseConfig } from "./firebaseConfig.js";
@@ -37,7 +37,8 @@ export async function ensureRoom(roomId) {
       question: {
         mode: "verbal",      // "verbal" | "text"
         text: "",
-        allowTyping: false,  // if true, students can type answers AFTER buzzing
+        answerMode: "buzz", // "buzz" | "typed_all"
+        answers: {},        // typed_all answers keyed by encoded student name
         askedAt: null
       },
 
@@ -63,12 +64,15 @@ export async function ensureRoom(roomId) {
 
   if (!Array.isArray(data.students)) patch.students = [];
   if (!data.question) {
-    patch.question = { mode: "verbal", text: "", allowTyping: false, askedAt: null };
+    patch.question = { mode: "verbal", text: "", answerMode: "buzz", answers: {}, askedAt: null };
   } else {
     if (!("mode" in data.question)) patch["question.mode"] = "verbal";
     if (!("text" in data.question)) patch["question.text"] = "";
-    if (!("allowTyping" in data.question)) patch["question.allowTyping"] = false;
+    if (!("answerMode" in data.question)) patch["question.answerMode"] = "buzz";
+    if (!("answers" in data.question) || typeof data.question.answers !== "object") patch["question.answers"] = {};
     if (!("askedAt" in data.question)) patch["question.askedAt"] = null;
+    // legacy field
+    if (!("allowTyping" in data.question)) patch["question.allowTyping"] = false;
   }
 
   if (!data.buzz) patch.buzz = { lockedBy: null, lockedAt: null, answer: null };
@@ -109,7 +113,9 @@ export async function setQuestion(roomId, { mode, text, allowTyping }) {
   await updateDoc(ref, {
     "question.mode": mode === "text" ? "text" : "verbal",
     "question.text": mode === "text" ? String(text || "").trim() : "",
-    "question.allowTyping": !!allowTyping,
+    "question.answerMode": mode === "text" ? "typed_all" : "buzz",
+    "question.answers": {},
+    "question.allowTyping": false, // legacy (unused)
     "question.askedAt": serverTimestamp()
   });
 
@@ -127,6 +133,8 @@ export async function clearQuestion(roomId) {
   await updateDoc(ref, {
     "question.text": "",
     "question.mode": "verbal",
+    "question.answerMode": "buzz",
+    "question.answers": {},
     "question.allowTyping": false,
     "question.askedAt": serverTimestamp(),
     "buzz.lockedBy": null,
@@ -145,6 +153,8 @@ export async function buzz(roomId, studentName) {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("Room not found");
     const data = snap.data();
+    const qMode = data?.question?.answerMode || "buzz";
+    if (qMode === "typed_all") return;
     const lockedBy = data?.buzz?.lockedBy ?? null;
     if (lockedBy) return; // already locked
     tx.update(ref, {
@@ -161,17 +171,31 @@ export async function submitAnswer(roomId, studentName, answerText) {
   if (!name) return;
 
   const ref = roomRef(roomId);
+  const key = encodeURIComponent(name).replaceAll(".", "%2E");
+
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("Room not found");
     const data = snap.data();
+    const qMode = data?.question?.answerMode || "buzz";
+
+    if (qMode === "typed_all") {
+      // Everyone can submit a typed answer (no buzzing required)
+      tx.update(ref, {
+        [`question.answers.${key}`]: { name, answer, submittedAt: serverTimestamp() }
+      });
+      return;
+    }
+
+    // Buzz mode: only the buzzer winner can submit an answer
     const lockedBy = data?.buzz?.lockedBy ?? null;
-    if (lockedBy !== name) return; // only the buzzer winner can submit
+    if (lockedBy !== name) return;
     tx.update(ref, {
-      "buzz.answer": answer || null
+      "buzz.answer": answer
     });
   });
 }
+
 
 export async function resetBuzz(roomId) {
   const ref = roomRef(roomId);

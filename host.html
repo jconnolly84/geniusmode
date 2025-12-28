@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Classroom Buzzer — Host</title>
+  <title>Genius Mode — Host</title>
   <link rel="stylesheet" href="app.css" />
   <style>
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -21,7 +21,7 @@
 <body>
   <div class="wrap">
     <header class="header">
-      <h1>Classroom Buzzer — Host</h1>
+      <h1>Genius Mode — Host</h1>
       <p class="muted">Project this screen. Students join on their devices and buzz in.</p>
     </header>
 
@@ -51,7 +51,7 @@
         <div class="row">
           <label class="pill"><input type="radio" name="qmode" value="verbal" checked /> Verbal</label>
           <label class="pill"><input type="radio" name="qmode" value="text" /> Typed on screen</label>
-          <label class="pill"><input id="allowTyping" type="checkbox" /> Allow typed answers (after buzzing)</label>
+          <label class="pill" id="allowTypingWrap" style="display:none;"><input id="allowTyping" type="checkbox" checked /> Allow typed answers (everyone)</label>
         </div>
 
         <div id="questionTextWrap" style="margin-top:10px; display:none;">
@@ -61,6 +61,13 @@
         <div class="row" style="margin-top:10px;">
           <button id="sendQuestionBtn">Send question</button>
           <button id="clearQuestionBtn" class="secondary">Clear</button>
+        </div>
+
+        
+        <div id="answersPanel" style="margin-top:12px; display:none;">
+          <h3 style="margin:10px 0 6px;">Student Answers</h3>
+          <div class="muted" id="answersCount"></div>
+          <div id="answersList" style="margin-top:8px; line-height:1.7;"></div>
         </div>
 
         <p class="muted" style="margin-top:10px;">Tip: sending a question also resets the buzzer.</p>
@@ -170,16 +177,18 @@
 
       // Question
       const q = data.question || {};
-      const mode = q.mode === "text" ? "text" : "verbal";
-      document.querySelectorAll('input[name="qmode"]').forEach(r => r.checked = (r.value === mode));
-      $("allowTyping").checked = !!q.allowTyping;
+      const mode = (q.mode === "text") ? "text" : "verbal";
+      const isText = (mode === "text");
 
-      if (mode === "text") {
-        $("questionTextWrap").style.display = "block";
-        $("questionText").value = q.text || "";
-      } else {
-        $("questionTextWrap").style.display = "none";
-        $("questionText").value = "";
+      // reflect mode in UI
+      document.querySelectorAll('input[name="qmode"]').forEach(r => r.checked = (r.value === mode));
+      $("questionTextWrap").style.display = isText ? "block" : "none";
+      $("allowTypingWrap").style.display = isText ? "inline-flex" : "none";
+      $("answersPanel").style.display = isText ? "block" : "none";
+
+      // typed questions: show text on host editor
+      $("questionText").value = isText ? (q.text || "") : "";
+      $("allowTyping").checked = isText; // typed questions always allow everyone to answer
       }
 
       // Buzzer
@@ -194,6 +203,24 @@
 
       $("winner").textContent = lockedBy || "—";
       $("typedAnswer").textContent = ans || "—";
+      // Typed answers (everyone) for on-screen questions
+      if (isText) {
+        const answersObj = (q.answers && typeof q.answers === "object") ? q.answers : {};
+        const entries = Object.values(answersObj)
+          .filter(v => v && typeof v === "object" && ("name" in v) && ("answer" in v));
+
+        $("answersCount").textContent = entries.length ? `Submitted: ${entries.length}` : "No answers submitted yet.";
+        $("answersList").innerHTML = entries.length
+          ? entries
+              .sort((a,b) => (a.name || "").localeCompare(b.name || ""))
+              .map(e => `<div><b>${escapeHtml(e.name)}</b>: ${escapeHtml(e.answer)}</div>`)
+              .join("")
+          : "";
+      } else {
+        $("answersCount").textContent = "";
+        $("answersList").innerHTML = "";
+      }
+
 
       // Cold call
       const cc = data.coldCall || {};
@@ -231,14 +258,20 @@
     // Toggle question textarea visibility instantly (no need to wait for DB)
     document.querySelectorAll('input[name="qmode"]').forEach(r => {
       r.addEventListener("change", () => {
-        $("questionTextWrap").style.display = (getMode() === "text") ? "block" : "none";
+        const isText = (getMode() === "text");
+        $("questionTextWrap").style.display = isText ? "block" : "none";
+        $("allowTypingWrap").style.display = isText ? "inline-flex" : "none";
+        // answers panel is only relevant for typed questions
+        $("answersPanel").style.display = isText ? "block" : "none";
       });
     });
 
-    $("sendQuestionBtn").addEventListener("click", async () => {
+$("sendQuestionBtn").addEventListener("click", async () => {
       if (!roomId) { $("status").textContent = "Create/open a room first."; return; }
       const mode = getMode();
-      const allowTyping = $("allowTyping").checked;
+      const isText = (mode === "text");
+      const allowTyping = isText ? true : false;
+      $("allowTyping").checked = allowTyping;
       const text = $("questionText").value;
 
       try {
