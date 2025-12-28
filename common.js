@@ -38,7 +38,8 @@ export async function ensureRoom(roomId) {
         mode: "verbal",      // "verbal" | "text"
         text: "",
         answerMode: "buzz", // "buzz" | "typed_all"
-        answers: {},        // typed_all answers keyed by encoded student name
+        answers: {},
+        answersList: [],        // typed_all answers keyed by encoded student name
         askedAt: null
       },
 
@@ -64,7 +65,8 @@ export async function ensureRoom(roomId) {
 
   if (!Array.isArray(data.students)) patch.students = [];
   if (!data.question) {
-    patch.question = { mode: "verbal", text: "", answerMode: "buzz", answers: {}, askedAt: null };
+    patch.question = { mode: "verbal", text: "", answerMode: "buzz", answers: {},
+        answersList: [], askedAt: null };
   } else {
     if (!("mode" in data.question)) patch["question.mode"] = "verbal";
     if (!("text" in data.question)) patch["question.text"] = "";
@@ -115,6 +117,8 @@ export async function setQuestion(roomId, { mode, text, allowTyping }) {
     "question.text": mode === "text" ? String(text || "").trim() : "",
     "question.answerMode": mode === "text" ? "typed_all" : "buzz",
     "question.answers": {},
+    "question.answersList": [],
+    "question.answersList": [],
     "question.allowTyping": false, // legacy (unused)
     "question.askedAt": serverTimestamp()
   });
@@ -135,6 +139,7 @@ export async function clearQuestion(roomId) {
     "question.mode": "verbal",
     "question.answerMode": "buzz",
     "question.answers": {},
+    "question.answersList": [],
     "question.allowTyping": false,
     "question.askedAt": serverTimestamp(),
     "buzz.lockedBy": null,
@@ -182,7 +187,8 @@ export async function submitAnswer(roomId, studentName, answerText) {
     if (qMode === "typed_all") {
       // Everyone can submit a typed answer (no buzzing required)
       tx.update(ref, {
-        [`question.answers.${key}`]: { name, answer, submittedAt: serverTimestamp() }
+        [`question.answers.${key}`]: { name, answer, submittedAt: serverTimestamp() },
+        "question.answersList": arrayUnion({ name, answer })
       });
       return;
     }

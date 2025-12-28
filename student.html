@@ -147,14 +147,15 @@
         $("buzzStatus").innerHTML = "Typed question: write your answer below and submit.";
 
         $("answerWrap").style.display = "block";
-        const key = keyFromName(me);
+                const key = keyFromName(me);
         const mine = (q.answers && q.answers[key]) ? q.answers[key] : null;
-        if (mine && mine.answer) {
-          $("answerStatus").innerHTML = `<span class="ok">Submitted:</span> ${escapeHtml(mine.answer)}`;
+        const listMine = (!mine && Array.isArray(q.answersList)) ? q.answersList.find(x => x && x.name === me) : null;
+        const show = mine && mine.answer ? mine.answer : (listMine && listMine.answer ? listMine.answer : "");
+        if (show) {
+          $("answerStatus").innerHTML = `<span class="ok">Submitted:</span> ${escapeHtml(show)}`;
         } else {
           $("answerStatus").textContent = "";
-        }
-      } else {
+        }} else {
         // Verbal question: buzz-in (first buzz wins)
         $("buzzBtn").style.display = "block";
 
